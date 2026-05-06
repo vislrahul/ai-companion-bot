@@ -23,7 +23,13 @@ const supabase = createClient(
 
 // TELEGRAM BOT
 const bot = new TelegramBot(process.env.BOT_TOKEN, {
-  polling: true
+  polling: {
+    autoStart: false
+  }
+});
+
+bot.startPolling({
+  restart: true
 });
 
 // OPENAI
@@ -34,22 +40,61 @@ const openai = new OpenAI({
 // BOT MESSAGE HANDLER
 bot.on('message', async (msg) => {
   try {
-    const userId = msg.chat.id;
+    const userId = String(msg.chat.id);
     const userMessage = msg.text;
 
     console.log("MESSAGE RECEIVED:", userMessage);
 
-    // SAVE MESSAGE TO SUPABASE
-    const { data, error } = await supabase
+    // SAVE USER MESSAGE TO SUPABASE
+    const { error: saveError } = await supabase
       .from('test')
       .insert([
         {
-          message: userMessage
+          user_id: userId,
+          role: 'user',
+          content: userMessage
         }
       ]);
 
-    console.log("SUPABASE DATA:", data);
-    console.log("SUPABASE ERROR:", error);
+    if (saveError) {
+      console.log("SUPABASE SAVE ERROR:", saveError);
+    }
+
+    // GET OLD MEMORY
+    const { data: memoryData, error: memoryError } = await supabase
+      .from('test')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (memoryError) {
+      console.log("MEMORY FETCH ERROR:", memoryError);
+    }
+
+    // FORMAT MEMORY
+    let messages = [
+      {
+        role: "system",
+        content:
+          "You are Aira, a caring Hinglish AI companion. Talk casually like a real human. Keep replies short, emotional, natural, and WhatsApp-style."
+      }
+    ];
+
+    if (memoryData) {
+      memoryData.reverse().forEach((item) => {
+        messages.push({
+          role: item.role,
+          content: item.content
+        });
+      });
+    }
+
+    // ADD CURRENT MESSAGE
+    messages.push({
+      role: "user",
+      content: userMessage
+    });
 
     // FOLLOW-UP TEST
     if (
@@ -64,24 +109,24 @@ bot.on('message', async (msg) => {
     // OPENAI RESPONSE
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are Aira, a caring Hinglish AI companion. Talk casually like a real human. Keep replies short, natural, emotional, and WhatsApp-style."
-        },
-        {
-          role: "user",
-          content: userMessage
-        }
-      ]
+      messages: messages
     });
 
-    // SEND BOT REPLY
-    bot.sendMessage(
-      msg.chat.id,
-      response.choices[0].message.content
-    );
+    const aiReply = response.choices[0].message.content;
+
+    // SAVE AI REPLY
+    await supabase
+      .from('test')
+      .insert([
+        {
+          user_id: userId,
+          role: 'assistant',
+          content: aiReply
+        }
+      ]);
+
+    // SEND REPLY
+    bot.sendMessage(userId, aiReply);
 
   } catch (error) {
     console.error("MAIN ERROR:", error);
