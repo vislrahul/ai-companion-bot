@@ -19,7 +19,14 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 bot.on('message', async (msg) => {
-  const userMessage = msg.text;
+  try {
+    const userId = msg.chat.id;
+    const userMessage = msg.text;
+    if (userMessage.toLowerCase().includes("30") || userMessage.toLowerCase().includes("half hour")) {
+      setTimeout(() => {
+        bot.sendMessage(userId, "ab free ho kya? 😄");
+      }, 30 * 60 * 1000);
+    }
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
