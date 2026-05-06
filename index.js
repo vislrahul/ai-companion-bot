@@ -1,4 +1,3 @@
-```js
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const OpenAI = require("openai");
@@ -16,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 3000;
 
 // ======================================
-// ENV CHECK
+// ENVIRONMENT CHECK
 // ======================================
 
 const REQUIRED_ENV = [
@@ -70,7 +69,7 @@ const bot = new TelegramBot(
 );
 
 // ======================================
-// WEBHOOK
+// WEBHOOK SETUP
 // ======================================
 
 const webhookUrl =
@@ -161,8 +160,8 @@ async function saveMessage(
       .insert([
         {
           user_id: userId,
-          role,
-          content
+          role: role,
+          content: content
         }
       ]);
 
@@ -187,10 +186,13 @@ async function saveMessage(
 }
 
 // ======================================
-// GET USER
+// GET OR CREATE USER
 // ======================================
 
-async function getUser(userId, telegramUser) {
+async function getUser(
+  userId,
+  telegramUser
+) {
 
   try {
 
@@ -209,20 +211,33 @@ async function getUser(userId, telegramUser) {
 
     }
 
-    const { data: newUser } =
-      await supabase
-        .from("users")
-        .insert([
-          {
-            user_id: userId,
-            name:
-              telegramUser.first_name || "",
-            mood: "normal",
-            relationship_level: 1
-          }
-        ])
-        .select()
-        .single();
+    const {
+      data: newUser,
+      error: insertError
+    } = await supabase
+      .from("users")
+      .insert([
+        {
+          user_id: userId,
+          name:
+            telegramUser.first_name || "",
+          mood: "normal",
+          relationship_level: 1
+        }
+      ])
+      .select()
+      .single();
+
+    if (insertError) {
+
+      console.log(
+        "USER INSERT ERROR:",
+        insertError
+      );
+
+      return null;
+
+    }
 
     return newUser;
 
@@ -296,7 +311,7 @@ async function generateReply(messages) {
     const completion =
       await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages
+        messages: messages
       });
 
     return (
@@ -312,6 +327,7 @@ async function generateReply(messages) {
     );
 
     return "Hey 😅 Technical issue aa gaya.";
+
   }
 
 }
@@ -338,7 +354,7 @@ bot.on("message", async (msg) => {
     );
 
     // ======================================
-    // GET OR CREATE USER
+    // GET USER
     // ======================================
 
     const user =
@@ -371,10 +387,9 @@ bot.on("message", async (msg) => {
     const systemPrompt = `
 You are Aira.
 
-User name: ${user?.name || "Unknown"}
+User Name: ${user?.name || "Unknown"}
 Mood: ${user?.mood || "normal"}
-Relationship level:
-${user?.relationship_level || 1}
+Relationship Level: ${user?.relationship_level || 1}
 
 Rules:
 - Talk naturally
@@ -382,7 +397,7 @@ Rules:
 - Short replies
 - Emotional tone
 - Cute WhatsApp style
-- Be caring and human-like
+- Be caring and supportive
 - Never sound robotic
 `;
 
@@ -407,7 +422,7 @@ Rules:
     });
 
     // ======================================
-    // CURRENT MESSAGE
+    // CURRENT USER MESSAGE
     // ======================================
 
     messages.push({
@@ -416,7 +431,7 @@ Rules:
     });
 
     // ======================================
-    // FOLLOW-UP MESSAGE
+    // FOLLOW-UP REMINDER
     // ======================================
 
     const lowerMessage =
@@ -515,4 +530,3 @@ app.listen(PORT, () => {
   );
 
 });
-```
