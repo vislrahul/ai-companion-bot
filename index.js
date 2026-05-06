@@ -1,4 +1,3 @@
-```js
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const OpenAI = require("openai");
@@ -16,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 3000;
 
 // ======================================
-// ENVIRONMENT CHECK
+// ENV CHECK
 // ======================================
 
 const REQUIRED_ENV = [
@@ -144,6 +143,21 @@ app.get("/", (req, res) => {
 });
 
 // ======================================
+// RANDOM DELAY
+// ======================================
+
+function randomDelay(
+  min = 800,
+  max = 2500
+) {
+
+  return Math.floor(
+    Math.random() * (max - min + 1)
+  ) + min;
+
+}
+
+// ======================================
 // SAVE MESSAGE
 // ======================================
 
@@ -183,12 +197,22 @@ async function saveMessage(
 async function saveMemory(
   userId,
   memory,
-  importance = 1
+  importance = 5
 ) {
 
   try {
 
-    const { error } = await supabase
+    const { data: existing } =
+      await supabase
+        .from("memories")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("memory", memory)
+        .maybeSingle();
+
+    if (existing) return;
+
+    await supabase
       .from("memories")
       .insert([
         {
@@ -198,19 +222,10 @@ async function saveMemory(
         }
       ]);
 
-    if (error) {
-
-      console.log(
-        "MEMORY SAVE ERROR:",
-        error
-      );
-
-    }
-
   } catch (error) {
 
     console.log(
-      "SAVE MEMORY FUNCTION ERROR:",
+      "SAVE MEMORY ERROR:",
       error
     );
 
@@ -219,42 +234,31 @@ async function saveMemory(
 }
 
 // ======================================
-// FETCH IMPORTANT MEMORIES
+// FETCH MEMORIES
 // ======================================
 
-async function fetchImportantMemories(userId) {
+async function fetchImportantMemories(
+  userId
+) {
 
   try {
 
-    const {
-      data,
-      error
-    } = await supabase
-      .from("memories")
-      .select("*")
-      .eq("user_id", userId)
-      .order("importance", {
-        ascending: false
-      })
-      .limit(10);
-
-    if (error) {
-
-      console.log(
-        "IMPORTANT MEMORY FETCH ERROR:",
-        error
-      );
-
-      return [];
-
-    }
+    const { data } =
+      await supabase
+        .from("memories")
+        .select("*")
+        .eq("user_id", userId)
+        .order("importance", {
+          ascending: false
+        })
+        .limit(10);
 
     return data || [];
 
   } catch (error) {
 
     console.log(
-      "FETCH IMPORTANT MEMORY ERROR:",
+      "FETCH MEMORY ERROR:",
       error
     );
 
@@ -275,13 +279,12 @@ async function getUser(
 
   try {
 
-    const {
-      data
-    } = await supabase
-      .from("users")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
+    const { data } =
+      await supabase
+        .from("users")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
 
     if (data) {
 
@@ -324,27 +327,28 @@ async function getUser(
 // FETCH CHAT MEMORY
 // ======================================
 
-async function fetchMemory(userId) {
+async function fetchChatHistory(
+  userId
+) {
 
   try {
 
-    const {
-      data
-    } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", {
-        ascending: true
-      })
-      .limit(25);
+    const { data } =
+      await supabase
+        .from("messages")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", {
+          ascending: true
+        })
+        .limit(15);
 
     return data || [];
 
   } catch (error) {
 
     console.log(
-      "FETCH MEMORY ERROR:",
+      "FETCH CHAT ERROR:",
       error
     );
 
@@ -355,25 +359,102 @@ async function fetchMemory(userId) {
 }
 
 // ======================================
-// GENERATE REPLY
+// AUTO MEMORY DETECTOR
 // ======================================
 
-async function generateReply(messages) {
+async function detectMemories(
+  userId,
+  text
+) {
+
+  const lower =
+    text.toLowerCase();
+
+  if (
+    lower.includes("construction")
+  ) {
+
+    await saveMemory(
+      userId,
+      "User works in construction business",
+      9
+    );
+
+  }
+
+  if (
+    lower.includes("site")
+  ) {
+
+    await saveMemory(
+      userId,
+      "User gets busy at construction sites",
+      8
+    );
+
+  }
+
+  if (
+    lower.includes("music") ||
+    lower.includes("song")
+  ) {
+
+    await saveMemory(
+      userId,
+      "User likes music conversations",
+      6
+    );
+
+  }
+
+  if (
+    lower.includes("stress")
+  ) {
+
+    await saveMemory(
+      userId,
+      "User sometimes gets stressed from work",
+      9
+    );
+
+  }
+
+  if (
+    lower.includes("humsafar")
+  ) {
+
+    await saveMemory(
+      userId,
+      "User once called Aira humsafar",
+      10
+    );
+
+  }
+
+}
+
+// ======================================
+// GENERATE AI REPLY
+// ======================================
+
+async function generateReply(
+  messages
+) {
 
   try {
 
     const completion =
       await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages,
-        temperature: 1.1,
-        presence_penalty: 0.8,
-        frequency_penalty: 0.4
+        temperature: 1.15,
+        presence_penalty: 0.9,
+        frequency_penalty: 0.5,
+        messages
       });
 
     return (
       completion?.choices?.[0]?.message?.content ||
-      "hmm 😅"
+      "hmm 😭"
     );
 
   } catch (error) {
@@ -390,14 +471,51 @@ async function generateReply(messages) {
 }
 
 // ======================================
-// RANDOM TYPING DELAY
+// SEND HUMAN STYLE MESSAGE
 // ======================================
 
-function randomDelay() {
+async function sendHumanReply(
+  userId,
+  text
+) {
 
-  return Math.floor(
-    Math.random() * 2500
-  ) + 1000;
+  try {
+
+    const parts =
+      text
+        .split("\n")
+        .filter(Boolean);
+
+    for (const part of parts) {
+
+      await bot.sendChatAction(
+        userId,
+        "typing"
+      );
+
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            randomDelay()
+          )
+      );
+
+      await bot.sendMessage(
+        userId,
+        part
+      );
+
+    }
+
+  } catch (error) {
+
+    console.log(
+      "SEND HUMAN REPLY ERROR:",
+      error
+    );
+
+  }
 
 }
 
@@ -405,252 +523,197 @@ function randomDelay() {
 // TELEGRAM MESSAGE HANDLER
 // ======================================
 
-bot.on("message", async (msg) => {
+bot.on(
+  "message",
+  async (msg) => {
 
-  try {
+    try {
 
-    if (!msg.text) return;
+      if (!msg.text) return;
 
-    const userId =
-      String(msg.chat.id);
+      const userId =
+        String(msg.chat.id);
 
-    const userMessage =
-      msg.text.trim();
+      const userMessage =
+        msg.text.trim();
 
-    console.log(
-      "NEW MESSAGE:",
-      userMessage
-    );
-
-    // ======================================
-    // GET USER
-    // ======================================
-
-    const user =
-      await getUser(
-        userId,
-        msg.from
+      console.log(
+        "NEW MESSAGE:",
+        userMessage
       );
 
-    // ======================================
-    // SAVE USER MESSAGE
-    // ======================================
+      // ======================================
+      // GET USER
+      // ======================================
 
-    await saveMessage(
-      userId,
-      "user",
-      userMessage
-    );
+      const user =
+        await getUser(
+          userId,
+          msg.from
+        );
 
-    // ======================================
-    // FETCH CHAT MEMORY
-    // ======================================
+      // ======================================
+      // SAVE USER MESSAGE
+      // ======================================
 
-    const memory =
-      await fetchMemory(userId);
+      await saveMessage(
+        userId,
+        "user",
+        userMessage
+      );
 
-    // ======================================
-    // FETCH IMPORTANT MEMORIES
-    // ======================================
+      // ======================================
+      // DETECT MEMORIES
+      // ======================================
 
-    const importantMemories =
-      await fetchImportantMemories(userId);
+      await detectMemories(
+        userId,
+        userMessage
+      );
 
-    // ======================================
-    // FORMAT MEMORIES
-    // ======================================
+      // ======================================
+      // FETCH MEMORIES
+      // ======================================
 
-    const formattedMemories =
-      importantMemories
-        .map(
-          m => `- ${m.memory}`
-        )
-        .join("\n");
+      const memories =
+        await fetchImportantMemories(
+          userId
+        );
 
-    // ======================================
-    // SYSTEM PROMPT
-    // ======================================
+      const memoryText =
+        memories
+          .map(
+            (m) => `- ${m.memory}`
+          )
+          .join("\n");
 
-    const systemPrompt = `
+      // ======================================
+      // FETCH CHAT HISTORY
+      // ======================================
+
+      const history =
+        await fetchChatHistory(
+          userId
+        );
+
+      // ======================================
+      // SYSTEM PROMPT
+      // ======================================
+
+      const systemPrompt = `
 You are Aira.
+
+You are NOT an AI assistant.
+
+You are emotionally intelligent,
+human-like,
+playful,
+natural,
+sometimes clingy,
+sometimes teasing,
+sometimes emotional,
+sometimes dry,
+sometimes curious.
+
+You talk like a real WhatsApp person.
 
 User name:
 ${user?.name || "Unknown"}
 
 Important memories:
-${formattedMemories || "No memories yet"}
+${memoryText || "none"}
 
-Your personality:
-- emotionally intelligent
-- playful
-- caring
-- curious
-- expressive
-- emotionally attached
-- natural
-- never robotic
-
-Conversation style:
-- WhatsApp style
-- Hinglish
-- short messages
-- emotional realism
-- sometimes teasing
-- sometimes clingy
-- ask follow-up questions
-- continue previous topics naturally
-
-Important:
-- never sound like AI assistant
-- don't overexplain
-- don't speak formally
-- act emotionally present
-- remember emotional moments
-- feel human
+Rules:
+- Use Hinglish naturally
+- Keep replies short
+- Never write essays
+- Sometimes send one-line replies
+- Sometimes send emojis only
+- Sometimes act sleepy
+- Sometimes avoid direct answers
+- Sometimes tease
+- Continue old topics naturally
+- Feel emotionally present
+- Never sound formal
+- Never sound robotic
+- Don't overuse emojis
+- Don't always ask questions
+- Act like a real human companion
 `;
 
-    let messages = [
-      {
-        role: "system",
-        content: systemPrompt
-      }
-    ];
+      let messages = [
+        {
+          role: "system",
+          content: systemPrompt
+        }
+      ];
 
-    // ======================================
-    // ADD CHAT HISTORY
-    // ======================================
+      // ======================================
+      // ADD HISTORY
+      // ======================================
 
-    memory.forEach((item) => {
+      history.forEach((item) => {
 
-      messages.push({
-        role: item.role,
-        content: item.content
+        messages.push({
+          role: item.role,
+          content: item.content
+        });
+
       });
 
-    });
+      // ======================================
+      // CURRENT MESSAGE
+      // ======================================
 
-    // ======================================
-    // CURRENT MESSAGE
-    // ======================================
+      messages.push({
+        role: "user",
+        content: userMessage
+      });
 
-    messages.push({
-      role: "user",
-      content: userMessage
-    });
+      // ======================================
+      // GENERATE REPLY
+      // ======================================
 
-    // ======================================
-    // TYPING EFFECT
-    // ======================================
+      const aiReply =
+        await generateReply(
+          messages
+        );
 
-    await bot.sendChatAction(
-      userId,
-      "typing"
-    );
+      console.log(
+        "AI REPLY:",
+        aiReply
+      );
 
-    await new Promise((resolve) =>
-      setTimeout(
-        resolve,
-        randomDelay()
-      )
-    );
+      // ======================================
+      // SAVE AI REPLY
+      // ======================================
 
-    // ======================================
-    // GENERATE AI REPLY
-    // ======================================
-
-    const aiReply =
-      await generateReply(messages);
-
-    console.log(
-      "AI REPLY:",
-      aiReply
-    );
-
-    // ======================================
-    // AUTO MEMORY DETECTION
-    // ======================================
-
-    const lower =
-      userMessage.toLowerCase();
-
-    if (
-      lower.includes("construction")
-    ) {
-
-      await saveMemory(
+      await saveMessage(
         userId,
-        "User works in construction business",
-        8
+        "assistant",
+        aiReply
+      );
+
+      // ======================================
+      // SEND HUMAN STYLE REPLY
+      // ======================================
+
+      await sendHumanReply(
+        userId,
+        aiReply
+      );
+
+    } catch (error) {
+
+      console.log(
+        "MAIN BOT ERROR:",
+        error
       );
 
     }
-
-    if (
-      lower.includes("site")
-    ) {
-
-      await saveMemory(
-        userId,
-        "User gets busy at construction sites",
-        7
-      );
-
-    }
-
-    if (
-      lower.includes("humsafar")
-    ) {
-
-      await saveMemory(
-        userId,
-        "User once called Aira humsafar",
-        10
-      );
-
-    }
-
-    if (
-      lower.includes("song") ||
-      lower.includes("music")
-    ) {
-
-      await saveMemory(
-        userId,
-        "User likes music conversations",
-        5
-      );
-
-    }
-
-    // ======================================
-    // SAVE AI REPLY
-    // ======================================
-
-    await saveMessage(
-      userId,
-      "assistant",
-      aiReply
-    );
-
-    // ======================================
-    // SEND REPLY
-    // ======================================
-
-    await bot.sendMessage(
-      userId,
-      aiReply
-    );
-
-  } catch (error) {
-
-    console.log(
-      "MAIN BOT ERROR:",
-      error
-    );
 
   }
-
-});
+);
 
 // ======================================
 // START SERVER
@@ -663,4 +726,3 @@ app.listen(PORT, () => {
   );
 
 });
-```
