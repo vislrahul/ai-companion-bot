@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 3000;
 // ENV VARIABLES CHECK
 // ======================================
 
-const requiredEnv = [
+const REQUIRED_ENV = [
   "BOT_TOKEN",
   "OPENAI_API_KEY",
   "SUPABASE_URL",
@@ -26,12 +26,19 @@ const requiredEnv = [
   "RENDER_EXTERNAL_URL"
 ];
 
-requiredEnv.forEach((env) => {
-  if (!process.env[env]) {
-    console.error(`Missing ENV Variable: ${env}`);
+for (const envName of REQUIRED_ENV) {
+
+  if (!process.env[envName]) {
+
+    console.error(
+      `Missing environment variable: ${envName}`
+    );
+
     process.exit(1);
+
   }
-});
+
+}
 
 // ======================================
 // SUPABASE
@@ -69,18 +76,25 @@ const webhookUrl =
   `${process.env.RENDER_EXTERNAL_URL}/bot${process.env.BOT_TOKEN}`;
 
 async function setupWebhook() {
+
   try {
+
     await bot.deleteWebHook();
+
     await bot.setWebHook(webhookUrl);
 
-    console.log("Webhook connected:");
+    console.log("Webhook connected");
     console.log(webhookUrl);
 
   } catch (error) {
 
-    console.log("WEBHOOK ERROR:", error);
+    console.log(
+      "WEBHOOK SETUP ERROR:",
+      error
+    );
 
   }
+
 }
 
 setupWebhook();
@@ -89,33 +103,43 @@ setupWebhook();
 // WEBHOOK ROUTE
 // ======================================
 
-app.post(`/bot${process.env.BOT_TOKEN}`, async (req, res) => {
+app.post(
+  `/bot${process.env.BOT_TOKEN}`,
+  async (req, res) => {
 
-  try {
+    try {
 
-    if (req.body) {
-      bot.processUpdate(req.body);
+      if (req.body) {
+
+        bot.processUpdate(req.body);
+
+      }
+
+      res.sendStatus(200);
+
+    } catch (error) {
+
+      console.log(
+        "WEBHOOK PROCESS ERROR:",
+        error
+      );
+
+      res.sendStatus(200);
+
     }
 
-    res.sendStatus(200);
-
-  } catch (error) {
-
-    console.log("PROCESS UPDATE ERROR:", error);
-
-    res.sendStatus(200);
-
   }
-
-});
+);
 
 // ======================================
-// HEALTH ROUTE
+// HEALTH CHECK ROUTE
 // ======================================
 
 app.get("/", (req, res) => {
 
-  res.status(200).send("AI Companion Bot Running");
+  res.status(200).send(
+    "AI Companion Bot Running"
+  );
 
 });
 
@@ -123,7 +147,11 @@ app.get("/", (req, res) => {
 // SAVE MESSAGE FUNCTION
 // ======================================
 
-async function saveMessage(userId, role, content) {
+async function saveMessage(
+  userId,
+  role,
+  content
+) {
 
   try {
 
@@ -132,32 +160,43 @@ async function saveMessage(userId, role, content) {
       .insert([
         {
           user_id: userId,
-          role,
-          content
+          role: role,
+          content: content
         }
       ]);
 
     if (error) {
-      console.log("SUPABASE SAVE ERROR:", error);
+
+      console.log(
+        "SUPABASE SAVE ERROR:",
+        error
+      );
+
     }
 
   } catch (error) {
 
-    console.log("SAVE FUNCTION ERROR:", error);
+    console.log(
+      "SAVE MESSAGE FUNCTION ERROR:",
+      error
+    );
 
   }
 
 }
 
 // ======================================
-// GET MEMORY FUNCTION
+// FETCH MEMORY FUNCTION
 // ======================================
 
-async function getMemory(userId) {
+async function fetchMemory(userId) {
 
   try {
 
-    const { data, error } = await supabase
+    const {
+      data,
+      error
+    } = await supabase
       .from("test")
       .select("*")
       .eq("user_id", userId)
@@ -168,7 +207,10 @@ async function getMemory(userId) {
 
     if (error) {
 
-      console.log("MEMORY FETCH ERROR:", error);
+      console.log(
+        "MEMORY FETCH ERROR:",
+        error
+      );
 
       return [];
 
@@ -178,9 +220,44 @@ async function getMemory(userId) {
 
   } catch (error) {
 
-    console.log("MEMORY FUNCTION ERROR:", error);
+    console.log(
+      "FETCH MEMORY FUNCTION ERROR:",
+      error
+    );
 
     return [];
+
+  }
+
+}
+
+// ======================================
+// CREATE AI RESPONSE
+// ======================================
+
+async function generateReply(messages) {
+
+  try {
+
+    const completion =
+      await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: messages
+      });
+
+    return (
+      completion?.choices?.[0]?.message?.content ||
+      "Hey 😅 Thoda issue aa gaya."
+    );
+
+  } catch (error) {
+
+    console.log(
+      "OPENAI ERROR:",
+      error
+    );
+
+    return "Hey 😅 Thoda technical issue aa gaya.";
 
   }
 
@@ -197,10 +274,16 @@ bot.on("message", async (msg) => {
     // Ignore non-text messages
     if (!msg.text) return;
 
-    const userId = String(msg.chat.id);
-    const userMessage = msg.text.trim();
+    const userId =
+      String(msg.chat.id);
 
-    console.log("NEW MESSAGE:", userMessage);
+    const userMessage =
+      msg.text.trim();
+
+    console.log(
+      "NEW MESSAGE:",
+      userMessage
+    );
 
     // ======================================
     // SAVE USER MESSAGE
@@ -213,10 +296,11 @@ bot.on("message", async (msg) => {
     );
 
     // ======================================
-    // FETCH MEMORY
+    // FETCH OLD MEMORY
     // ======================================
 
-    const memory = await getMemory(userId);
+    const memory =
+      await fetchMemory(userId);
 
     // ======================================
     // SYSTEM PROMPT
@@ -228,33 +312,36 @@ bot.on("message", async (msg) => {
         content:
           `You are Aira, a caring Hinglish AI companion.
 
-Talk naturally like a real human friend.
-
 Rules:
-- Short replies
-- Emotional tone
+- Talk like a real human friend
+- Use short replies
+- Emotional and natural tone
 - Cute WhatsApp style
 - Use Hinglish naturally
-- Be supportive and caring
+- Be caring and supportive
 - Never sound robotic`
       }
     ];
 
     // ======================================
-    // ADD MEMORY
+    // ADD OLD MEMORY
     // ======================================
 
-    memory.forEach((item) => {
+    if (memory.length > 0) {
 
-      messages.push({
-        role: item.role,
-        content: item.content
+      memory.forEach((item) => {
+
+        messages.push({
+          role: item.role,
+          content: item.content
+        });
+
       });
 
-    });
+    }
 
     // ======================================
-    // ADD CURRENT MESSAGE
+    // ADD CURRENT USER MESSAGE
     // ======================================
 
     messages.push({
@@ -263,7 +350,7 @@ Rules:
     });
 
     // ======================================
-    // FOLLOW UP REMINDER
+    // FOLLOW-UP REMINDER
     // ======================================
 
     const lowerMessage =
@@ -297,20 +384,16 @@ Rules:
     }
 
     // ======================================
-    // OPENAI RESPONSE
+    // GENERATE AI RESPONSE
     // ======================================
 
-    const completion =
-      await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages
-      });
-
     const aiReply =
-      completion.choices?.[0]?.message?.content ||
-      "Heyy 😅 Thoda issue aa gaya. Dobara bolo na.";
+      await generateReply(messages);
 
-    console.log("AI REPLY:", aiReply);
+    console.log(
+      "AI REPLY:",
+      aiReply
+    );
 
     // ======================================
     // SAVE AI REPLY
@@ -323,7 +406,7 @@ Rules:
     );
 
     // ======================================
-    // SEND TELEGRAM MESSAGE
+    // SEND REPLY
     // ======================================
 
     await bot.sendMessage(
@@ -333,169 +416,18 @@ Rules:
 
   } catch (error) {
 
-    console.log("MAIN BOT ERROR:", error);
-
-    try {
-
-      await bot.sendMessage(
-        msg.chat.id,
-        "Hey 😅 Kuch technical issue aa gaya. Thodi der baad try karo."
-      );
-
-    } catch (sendError) {
-
-      console.log(
-        "ERROR MESSAGE SEND FAILED:",
-        sendError
-      );
-
-    }
-
-  }
-
-});
-
-// ======================================
-// START SERVER
-// ======================================
-
-app.listen(PORT, () => {
-
-  console.log(
-    `Server started on port ${PORT}`
-  );
-
-});      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', {
-        ascending: true
-      })
-      .limit(10);
-
-    if (memoryError) {
-      console.log("MEMORY FETCH ERROR:", memoryError);
-    }
-
-    // =======================
-    // SYSTEM PROMPT
-    // =======================
-
-    let messages = [
-      {
-        role: "system",
-        content:
-          "You are Aira, a caring Hinglish AI companion. Talk casually like a real human friend. Keep replies short, emotional, natural, cute, and WhatsApp-style. Understand emotions properly."
-      }
-    ];
-
-    // =======================
-    // ADD OLD MEMORY
-    // =======================
-
-    if (memoryData && memoryData.length > 0) {
-
-      memoryData.forEach((item) => {
-
-        messages.push({
-          role: item.role,
-          content: item.content
-        });
-
-      });
-
-    }
-
-    // =======================
-    // CURRENT MESSAGE
-    // =======================
-
-    messages.push({
-      role: "user",
-      content: userMessage
-    });
-
-    // =======================
-    // FOLLOW-UP MESSAGE
-    // =======================
-
-    if (
-      userMessage.toLowerCase().includes("30") ||
-      userMessage.toLowerCase().includes("half hour")
-    ) {
-
-      setTimeout(async () => {
-
-        try {
-
-          await bot.sendMessage(
-            userId,
-            "ab free ho kya? 😄"
-          );
-
-        } catch (err) {
-
-          console.log("FOLLOW UP ERROR:", err);
-
-        }
-
-      }, 30 * 60 * 1000);
-
-    }
-
-    // =======================
-    // OPENAI RESPONSE
-    // =======================
-
-    const response =
-      await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: messages
-      });
-
-    const aiReply =
-      response.choices[0].message.content;
-
-    console.log("AI REPLY:", aiReply);
-
-    // =======================
-    // SAVE AI REPLY
-    // =======================
-
-    const { error: aiSaveError } =
-      await supabase
-        .from('test')
-        .insert([
-          {
-            user_id: userId,
-            role: 'assistant',
-            content: aiReply
-          }
-        ]);
-
-    if (aiSaveError) {
-      console.log("AI SAVE ERROR:", aiSaveError);
-    }
-
-    // =======================
-    // SEND MESSAGE
-    // =======================
-
-    await bot.sendMessage(
-      userId,
-      aiReply
+    console.log(
+      "MAIN BOT ERROR:",
+      error
     );
 
-  } catch (error) {
-
-    console.log("MAIN ERROR:", error);
-
   }
 
 });
 
-// =======================
+// ======================================
 // START SERVER
-// =======================
+// ======================================
 
 app.listen(PORT, () => {
 
