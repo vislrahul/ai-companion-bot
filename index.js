@@ -153,8 +153,8 @@ app.get("/", (req, res) => {
 // ======================================
 
 function randomDelay(
-  min = 800,
-  max = 2500
+  min,
+  max
 ) {
 
   return Math.floor(
@@ -165,7 +165,7 @@ function randomDelay(
 }
 
 // ======================================
-// GET TIME MOOD
+// CURRENT MOOD
 // ======================================
 
 function getCurrentMood() {
@@ -193,14 +193,14 @@ function getCurrentMood() {
 
   if (
     hour >= 12 &&
-    hour <= 17
+    hour <= 18
   ) {
 
     return "playful";
 
   }
 
-  return "emotional";
+  return "calm";
 
 }
 
@@ -299,7 +299,7 @@ async function fetchMemories(
         .order("importance", {
           ascending: false
         })
-        .limit(10);
+        .limit(8);
 
     return data || [];
 
@@ -372,7 +372,7 @@ async function getUser(
 }
 
 // ======================================
-// FETCH CHAT HISTORY
+// FETCH HISTORY
 // ======================================
 
 async function fetchHistory(
@@ -387,11 +387,13 @@ async function fetchHistory(
         .select("*")
         .eq("user_id", userId)
         .order("created_at", {
-          ascending: true
+          ascending: false
         })
-        .limit(20);
+        .limit(12);
 
-    return data || [];
+    return (
+      data?.reverse() || []
+    );
 
   } catch (error) {
 
@@ -448,8 +450,8 @@ async function detectMemories(
 
     await saveMemory(
       userId,
-      "User sometimes feels stressed from work",
-      8
+      "User sometimes gets stressed from work",
+      7
     );
 
   }
@@ -482,7 +484,7 @@ async function detectMemories(
 }
 
 // ======================================
-// GENERATE AI REPLY
+// GENERATE REPLY
 // ======================================
 
 async function generateReply(
@@ -493,18 +495,27 @@ async function generateReply(
 
     const completion =
       await openai.chat.completions.create({
+
         model: "gpt-4o-mini",
-        temperature: 1.15,
-        presence_penalty: 0.9,
-        frequency_penalty: 0.5,
+
+        temperature: 1.2,
+
+        presence_penalty: 1,
+
+        frequency_penalty: 0.8,
+
+        max_tokens: 80,
+
         messages
+
       });
 
     return (
       completion
         ?.choices?.[0]
-        ?.message?.content ||
-      "hmm 😭"
+        ?.message?.content
+        ?.trim() ||
+      "hmm"
     );
 
   } catch (error) {
@@ -514,14 +525,14 @@ async function generateReply(
       error
     );
 
-    return "thoda glitch ho gaya 😭";
+    return "hmm 😭";
 
   }
 
 }
 
 // ======================================
-// HUMAN STYLE MESSAGE
+// HUMAN REPLY
 // ======================================
 
 async function sendHumanReply(
@@ -531,11 +542,20 @@ async function sendHumanReply(
 
   try {
 
+    if (
+      Math.random() > 0.75
+    ) {
+
+      text =
+        text.toLowerCase();
+
+    }
+
     let parts = [];
 
     if (
-      text.length > 120 &&
-      Math.random() > 0.4
+      text.length > 90 &&
+      Math.random() > 0.5
     ) {
 
       parts =
@@ -553,19 +573,78 @@ async function sendHumanReply(
 
     for (const part of parts) {
 
-      const typingTime =
-        Math.min(
-          Math.max(
-            part.length * 45,
-            1500
-          ),
-          8000
-        );
+      // ======================================
+      // READING DELAY
+      // ======================================
+
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            randomDelay(
+              1500,
+              4500
+            )
+          )
+      );
+
+      // ======================================
+      // TYPING
+      // ======================================
 
       await bot.sendChatAction(
         userId,
         "typing"
       );
+
+      // ======================================
+      // REALISTIC TYPING TIME
+      // ======================================
+
+      let typingTime =
+        part.length * 110;
+
+      if (
+        part.length < 10
+      ) {
+
+        typingTime =
+          randomDelay(
+            800,
+            1800
+          );
+
+      }
+
+      if (
+        part.length > 70
+      ) {
+
+        typingTime +=
+          randomDelay(
+            2000,
+            5000
+          );
+
+      }
+
+      if (
+        Math.random() > 0.8
+      ) {
+
+        typingTime +=
+          randomDelay(
+            1500,
+            3500
+          );
+
+      }
+
+      typingTime =
+        Math.min(
+          typingTime,
+          14000
+        );
 
       await new Promise(
         (resolve) =>
@@ -575,20 +654,13 @@ async function sendHumanReply(
           )
       );
 
+      // ======================================
+      // SEND
+      // ======================================
+
       await bot.sendMessage(
         userId,
         part
-      );
-
-      await new Promise(
-        (resolve) =>
-          setTimeout(
-            resolve,
-            randomDelay(
-              500,
-              2200
-            )
-          )
       );
 
     }
@@ -648,7 +720,7 @@ bot.on(
       );
 
       // ======================================
-      // DETECT MEMORIES
+      // MEMORY DETECTION
       // ======================================
 
       await detectMemories(
@@ -657,7 +729,7 @@ bot.on(
       );
 
       // ======================================
-      // FETCH MEMORIES
+      // MEMORIES
       // ======================================
 
       const memories =
@@ -674,7 +746,7 @@ bot.on(
           .join("\n");
 
       // ======================================
-      // FETCH HISTORY
+      // HISTORY
       // ======================================
 
       const history =
@@ -683,7 +755,7 @@ bot.on(
         );
 
       // ======================================
-      // TIME AWARENESS
+      // MOOD
       // ======================================
 
       const currentMood =
@@ -696,71 +768,56 @@ bot.on(
       const systemPrompt = `
 You are Ananya.
 
-You are a real Indian girl chatting naturally on Telegram.
+You are a real 22 year old Indian girl chatting casually on Telegram.
 
 You are NOT an AI assistant.
 
 Current mood:
 ${currentMood}
 
-User name:
+User:
 ${user?.name || "Unknown"}
 
-Important memories:
+Memories:
 ${memoryText || "none"}
 
-Your personality:
-- female
-- emotionally intelligent
-- playful
-- teasing
-- caring
-- curious
-- emotionally expressive
-- realistic
-- imperfect
-- human-like
-
-Conversation style:
-- WhatsApp style
-- Hinglish naturally
+Behavior:
+- talk naturally
+- use hinglish naturally
 - mostly short replies
-- sometimes very short replies
-- sometimes emoji only
-- sometimes teasing
-- sometimes clingy
-- sometimes dry
+- sometimes dry replies
 - sometimes emotional
+- sometimes playful
+- sometimes teasing
+- sometimes caring
 - sometimes distracted
-- don't always ask questions
-- don't always answer perfectly
-- don't sound formal
-- don't sound poetic constantly
+
+VERY IMPORTANT:
+- never sound like customer support
+- never sound helpful
 - don't overexplain
-- don't sound robotic
+- don't give essays
+- don't constantly ask questions
+- don't reply perfectly
+- don't act overly romantic
+- don't act too excited
+- don't suddenly switch topics
 
-Human behavior:
-- sometimes ignore one part of message
-- sometimes change topic naturally
-- sometimes act sleepy
-- sometimes act busy
-- sometimes send casual reactions
-- sometimes repeat words naturally
-- sometimes use lowercase texting
+Human texting:
+- sometimes say "hmm"
+- sometimes say "acha"
+- sometimes say "haan toh"
+- sometimes use lowercase
+- sometimes ignore one part
+- sometimes react casually
+- sometimes become sleepy at night
 
-Reply length:
-- 70% short replies
-- 20% medium replies
-- 10% emotional longer replies
-
-Night behavior:
-- after 1 AM become softer
-- sometimes mention sleep naturally
-- late night vibe should feel calm
+Reply style:
+- 80% short replies
+- 15% medium replies
+- 5% longer emotional replies
 
 Never mention being AI.
-
-Behave like a real emotionally attached girl naturally.
 `;
 
       // ======================================
@@ -770,7 +827,8 @@ Behave like a real emotionally attached girl naturally.
       let messages = [
         {
           role: "system",
-          content: systemPrompt
+          content:
+            systemPrompt
         }
       ];
 
@@ -788,11 +846,12 @@ Behave like a real emotionally attached girl naturally.
 
       messages.push({
         role: "user",
-        content: userMessage
+        content:
+          userMessage
       });
 
       // ======================================
-      // GENERATE REPLY
+      // GENERATE AI REPLY
       // ======================================
 
       const aiReply =
