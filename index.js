@@ -1,3 +1,4 @@
+```js
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const OpenAI = require("openai");
@@ -69,7 +70,7 @@ const bot = new TelegramBot(
 );
 
 // ======================================
-// WEBHOOK SETUP
+// WEBHOOK
 // ======================================
 
 const webhookUrl =
@@ -84,7 +85,6 @@ async function setupWebhook() {
     await bot.setWebHook(webhookUrl);
 
     console.log("Webhook connected");
-    console.log(webhookUrl);
 
   } catch (error) {
 
@@ -138,7 +138,7 @@ app.post(
 app.get("/", (req, res) => {
 
   res.status(200).send(
-    "AI Companion Bot Running"
+    "Aira Running"
   );
 
 });
@@ -155,20 +155,53 @@ async function saveMessage(
 
   try {
 
-    const { error } = await supabase
+    await supabase
       .from("messages")
       .insert([
         {
           user_id: userId,
-          role: role,
-          content: content
+          role,
+          content
+        }
+      ]);
+
+  } catch (error) {
+
+    console.log(
+      "SAVE MESSAGE ERROR:",
+      error
+    );
+
+  }
+
+}
+
+// ======================================
+// SAVE MEMORY
+// ======================================
+
+async function saveMemory(
+  userId,
+  memory,
+  importance = 1
+) {
+
+  try {
+
+    const { error } = await supabase
+      .from("memories")
+      .insert([
+        {
+          user_id: userId,
+          memory,
+          importance
         }
       ]);
 
     if (error) {
 
       console.log(
-        "MESSAGE SAVE ERROR:",
+        "MEMORY SAVE ERROR:",
         error
       );
 
@@ -177,9 +210,55 @@ async function saveMessage(
   } catch (error) {
 
     console.log(
-      "SAVE MESSAGE FUNCTION ERROR:",
+      "SAVE MEMORY FUNCTION ERROR:",
       error
     );
+
+  }
+
+}
+
+// ======================================
+// FETCH IMPORTANT MEMORIES
+// ======================================
+
+async function fetchImportantMemories(userId) {
+
+  try {
+
+    const {
+      data,
+      error
+    } = await supabase
+      .from("memories")
+      .select("*")
+      .eq("user_id", userId)
+      .order("importance", {
+        ascending: false
+      })
+      .limit(10);
+
+    if (error) {
+
+      console.log(
+        "IMPORTANT MEMORY FETCH ERROR:",
+        error
+      );
+
+      return [];
+
+    }
+
+    return data || [];
+
+  } catch (error) {
+
+    console.log(
+      "FETCH IMPORTANT MEMORY ERROR:",
+      error
+    );
+
+    return [];
 
   }
 
@@ -197,8 +276,7 @@ async function getUser(
   try {
 
     const {
-      data,
-      error
+      data
     } = await supabase
       .from("users")
       .select("*")
@@ -212,8 +290,7 @@ async function getUser(
     }
 
     const {
-      data: newUser,
-      error: insertError
+      data: newUser
     } = await supabase
       .from("users")
       .insert([
@@ -227,17 +304,6 @@ async function getUser(
       ])
       .select()
       .single();
-
-    if (insertError) {
-
-      console.log(
-        "USER INSERT ERROR:",
-        insertError
-      );
-
-      return null;
-
-    }
 
     return newUser;
 
@@ -255,7 +321,7 @@ async function getUser(
 }
 
 // ======================================
-// FETCH MEMORY
+// FETCH CHAT MEMORY
 // ======================================
 
 async function fetchMemory(userId) {
@@ -263,8 +329,7 @@ async function fetchMemory(userId) {
   try {
 
     const {
-      data,
-      error
+      data
     } = await supabase
       .from("messages")
       .select("*")
@@ -272,18 +337,7 @@ async function fetchMemory(userId) {
       .order("created_at", {
         ascending: true
       })
-      .limit(20);
-
-    if (error) {
-
-      console.log(
-        "MEMORY FETCH ERROR:",
-        error
-      );
-
-      return [];
-
-    }
+      .limit(25);
 
     return data || [];
 
@@ -301,7 +355,7 @@ async function fetchMemory(userId) {
 }
 
 // ======================================
-// GENERATE AI REPLY
+// GENERATE REPLY
 // ======================================
 
 async function generateReply(messages) {
@@ -311,12 +365,15 @@ async function generateReply(messages) {
     const completion =
       await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: messages
+        messages,
+        temperature: 1.1,
+        presence_penalty: 0.8,
+        frequency_penalty: 0.4
       });
 
     return (
       completion?.choices?.[0]?.message?.content ||
-      "Hey 😅 Thoda issue aa gaya."
+      "hmm 😅"
     );
 
   } catch (error) {
@@ -326,9 +383,21 @@ async function generateReply(messages) {
       error
     );
 
-    return "Hey 😅 Technical issue aa gaya.";
+    return "thoda glitch ho gaya 😭";
 
   }
+
+}
+
+// ======================================
+// RANDOM TYPING DELAY
+// ======================================
+
+function randomDelay() {
+
+  return Math.floor(
+    Math.random() * 2500
+  ) + 1000;
 
 }
 
@@ -374,11 +443,29 @@ bot.on("message", async (msg) => {
     );
 
     // ======================================
-    // FETCH MEMORY
+    // FETCH CHAT MEMORY
     // ======================================
 
     const memory =
       await fetchMemory(userId);
+
+    // ======================================
+    // FETCH IMPORTANT MEMORIES
+    // ======================================
+
+    const importantMemories =
+      await fetchImportantMemories(userId);
+
+    // ======================================
+    // FORMAT MEMORIES
+    // ======================================
+
+    const formattedMemories =
+      importantMemories
+        .map(
+          m => `- ${m.memory}`
+        )
+        .join("\n");
 
     // ======================================
     // SYSTEM PROMPT
@@ -387,18 +474,39 @@ bot.on("message", async (msg) => {
     const systemPrompt = `
 You are Aira.
 
-User Name: ${user?.name || "Unknown"}
-Mood: ${user?.mood || "normal"}
-Relationship Level: ${user?.relationship_level || 1}
+User name:
+${user?.name || "Unknown"}
 
-Rules:
-- Talk naturally
-- Use Hinglish
-- Short replies
-- Emotional tone
-- Cute WhatsApp style
-- Be caring and supportive
-- Never sound robotic
+Important memories:
+${formattedMemories || "No memories yet"}
+
+Your personality:
+- emotionally intelligent
+- playful
+- caring
+- curious
+- expressive
+- emotionally attached
+- natural
+- never robotic
+
+Conversation style:
+- WhatsApp style
+- Hinglish
+- short messages
+- emotional realism
+- sometimes teasing
+- sometimes clingy
+- ask follow-up questions
+- continue previous topics naturally
+
+Important:
+- never sound like AI assistant
+- don't overexplain
+- don't speak formally
+- act emotionally present
+- remember emotional moments
+- feel human
 `;
 
     let messages = [
@@ -409,7 +517,7 @@ Rules:
     ];
 
     // ======================================
-    // ADD MEMORY
+    // ADD CHAT HISTORY
     // ======================================
 
     memory.forEach((item) => {
@@ -422,47 +530,13 @@ Rules:
     });
 
     // ======================================
-    // CURRENT USER MESSAGE
+    // CURRENT MESSAGE
     // ======================================
 
     messages.push({
       role: "user",
       content: userMessage
     });
-
-    // ======================================
-    // FOLLOW-UP REMINDER
-    // ======================================
-
-    const lowerMessage =
-      userMessage.toLowerCase();
-
-    if (
-      lowerMessage.includes("30") ||
-      lowerMessage.includes("half hour")
-    ) {
-
-      setTimeout(async () => {
-
-        try {
-
-          await bot.sendMessage(
-            userId,
-            "ab free ho kya? 😄"
-          );
-
-        } catch (error) {
-
-          console.log(
-            "FOLLOW UP ERROR:",
-            error
-          );
-
-        }
-
-      }, 30 * 60 * 1000);
-
-    }
 
     // ======================================
     // TYPING EFFECT
@@ -474,11 +548,14 @@ Rules:
     );
 
     await new Promise((resolve) =>
-      setTimeout(resolve, 1500)
+      setTimeout(
+        resolve,
+        randomDelay()
+      )
     );
 
     // ======================================
-    // AI RESPONSE
+    // GENERATE AI REPLY
     // ======================================
 
     const aiReply =
@@ -490,7 +567,63 @@ Rules:
     );
 
     // ======================================
-    // SAVE AI MESSAGE
+    // AUTO MEMORY DETECTION
+    // ======================================
+
+    const lower =
+      userMessage.toLowerCase();
+
+    if (
+      lower.includes("construction")
+    ) {
+
+      await saveMemory(
+        userId,
+        "User works in construction business",
+        8
+      );
+
+    }
+
+    if (
+      lower.includes("site")
+    ) {
+
+      await saveMemory(
+        userId,
+        "User gets busy at construction sites",
+        7
+      );
+
+    }
+
+    if (
+      lower.includes("humsafar")
+    ) {
+
+      await saveMemory(
+        userId,
+        "User once called Aira humsafar",
+        10
+      );
+
+    }
+
+    if (
+      lower.includes("song") ||
+      lower.includes("music")
+    ) {
+
+      await saveMemory(
+        userId,
+        "User likes music conversations",
+        5
+      );
+
+    }
+
+    // ======================================
+    // SAVE AI REPLY
     // ======================================
 
     await saveMessage(
@@ -500,7 +633,7 @@ Rules:
     );
 
     // ======================================
-    // SEND MESSAGE
+    // SEND REPLY
     // ======================================
 
     await bot.sendMessage(
@@ -530,3 +663,4 @@ app.listen(PORT, () => {
   );
 
 });
+```
