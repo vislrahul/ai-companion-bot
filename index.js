@@ -1,10 +1,11 @@
+```js
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const OpenAI = require("openai");
 const { createClient } = require("@supabase/supabase-js");
 
 // ======================================
-// EXPRESS APP
+// EXPRESS
 // ======================================
 
 const app = express();
@@ -15,7 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 3000;
 
 // ======================================
-// ENV VARIABLES CHECK
+// ENV CHECK
 // ======================================
 
 const REQUIRED_ENV = [
@@ -31,7 +32,7 @@ for (const envName of REQUIRED_ENV) {
   if (!process.env[envName]) {
 
     console.error(
-      `Missing environment variable: ${envName}`
+      `Missing ENV Variable: ${envName}`
     );
 
     process.exit(1);
@@ -69,7 +70,7 @@ const bot = new TelegramBot(
 );
 
 // ======================================
-// WEBHOOK SETUP
+// WEBHOOK
 // ======================================
 
 const webhookUrl =
@@ -89,7 +90,7 @@ async function setupWebhook() {
   } catch (error) {
 
     console.log(
-      "WEBHOOK SETUP ERROR:",
+      "WEBHOOK ERROR:",
       error
     );
 
@@ -132,7 +133,7 @@ app.post(
 );
 
 // ======================================
-// HEALTH CHECK ROUTE
+// HEALTH ROUTE
 // ======================================
 
 app.get("/", (req, res) => {
@@ -144,7 +145,7 @@ app.get("/", (req, res) => {
 });
 
 // ======================================
-// SAVE MESSAGE FUNCTION
+// SAVE MESSAGE
 // ======================================
 
 async function saveMessage(
@@ -156,19 +157,19 @@ async function saveMessage(
   try {
 
     const { error } = await supabase
-      .from("test")
+      .from("messages")
       .insert([
         {
           user_id: userId,
-          role: role,
-          content: content
+          role,
+          content
         }
       ]);
 
     if (error) {
 
       console.log(
-        "SUPABASE SAVE ERROR:",
+        "MESSAGE SAVE ERROR:",
         error
       );
 
@@ -186,7 +187,60 @@ async function saveMessage(
 }
 
 // ======================================
-// FETCH MEMORY FUNCTION
+// GET USER
+// ======================================
+
+async function getUser(userId, telegramUser) {
+
+  try {
+
+    const {
+      data,
+      error
+    } = await supabase
+      .from("users")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (data) {
+
+      return data;
+
+    }
+
+    const { data: newUser } =
+      await supabase
+        .from("users")
+        .insert([
+          {
+            user_id: userId,
+            name:
+              telegramUser.first_name || "",
+            mood: "normal",
+            relationship_level: 1
+          }
+        ])
+        .select()
+        .single();
+
+    return newUser;
+
+  } catch (error) {
+
+    console.log(
+      "GET USER ERROR:",
+      error
+    );
+
+    return null;
+
+  }
+
+}
+
+// ======================================
+// FETCH MEMORY
 // ======================================
 
 async function fetchMemory(userId) {
@@ -197,7 +251,7 @@ async function fetchMemory(userId) {
       data,
       error
     } = await supabase
-      .from("test")
+      .from("messages")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", {
@@ -221,7 +275,7 @@ async function fetchMemory(userId) {
   } catch (error) {
 
     console.log(
-      "FETCH MEMORY FUNCTION ERROR:",
+      "FETCH MEMORY ERROR:",
       error
     );
 
@@ -232,7 +286,7 @@ async function fetchMemory(userId) {
 }
 
 // ======================================
-// CREATE AI RESPONSE
+// GENERATE AI REPLY
 // ======================================
 
 async function generateReply(messages) {
@@ -242,7 +296,7 @@ async function generateReply(messages) {
     const completion =
       await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: messages
+        messages
       });
 
     return (
@@ -257,8 +311,7 @@ async function generateReply(messages) {
       error
     );
 
-    return "Hey 😅 Thoda technical issue aa gaya.";
-
+    return "Hey 😅 Technical issue aa gaya.";
   }
 
 }
@@ -271,7 +324,6 @@ bot.on("message", async (msg) => {
 
   try {
 
-    // Ignore non-text messages
     if (!msg.text) return;
 
     const userId =
@@ -286,6 +338,16 @@ bot.on("message", async (msg) => {
     );
 
     // ======================================
+    // GET OR CREATE USER
+    // ======================================
+
+    const user =
+      await getUser(
+        userId,
+        msg.from
+      );
+
+    // ======================================
     // SAVE USER MESSAGE
     // ======================================
 
@@ -296,7 +358,7 @@ bot.on("message", async (msg) => {
     );
 
     // ======================================
-    // FETCH OLD MEMORY
+    // FETCH MEMORY
     // ======================================
 
     const memory =
@@ -306,42 +368,46 @@ bot.on("message", async (msg) => {
     // SYSTEM PROMPT
     // ======================================
 
+    const systemPrompt = `
+You are Aira.
+
+User name: ${user?.name || "Unknown"}
+Mood: ${user?.mood || "normal"}
+Relationship level:
+${user?.relationship_level || 1}
+
+Rules:
+- Talk naturally
+- Use Hinglish
+- Short replies
+- Emotional tone
+- Cute WhatsApp style
+- Be caring and human-like
+- Never sound robotic
+`;
+
     let messages = [
       {
         role: "system",
-        content:
-          `You are Aira, a caring Hinglish AI companion.
-
-Rules:
-- Talk like a real human friend
-- Use short replies
-- Emotional and natural tone
-- Cute WhatsApp style
-- Use Hinglish naturally
-- Be caring and supportive
-- Never sound robotic`
+        content: systemPrompt
       }
     ];
 
     // ======================================
-    // ADD OLD MEMORY
+    // ADD MEMORY
     // ======================================
 
-    if (memory.length > 0) {
+    memory.forEach((item) => {
 
-      memory.forEach((item) => {
-
-        messages.push({
-          role: item.role,
-          content: item.content
-        });
-
+      messages.push({
+        role: item.role,
+        content: item.content
       });
 
-    }
+    });
 
     // ======================================
-    // ADD CURRENT USER MESSAGE
+    // CURRENT MESSAGE
     // ======================================
 
     messages.push({
@@ -350,7 +416,7 @@ Rules:
     });
 
     // ======================================
-    // FOLLOW-UP REMINDER
+    // FOLLOW-UP MESSAGE
     // ======================================
 
     const lowerMessage =
@@ -384,7 +450,20 @@ Rules:
     }
 
     // ======================================
-    // GENERATE AI RESPONSE
+    // TYPING EFFECT
+    // ======================================
+
+    await bot.sendChatAction(
+      userId,
+      "typing"
+    );
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, 1500)
+    );
+
+    // ======================================
+    // AI RESPONSE
     // ======================================
 
     const aiReply =
@@ -396,7 +475,7 @@ Rules:
     );
 
     // ======================================
-    // SAVE AI REPLY
+    // SAVE AI MESSAGE
     // ======================================
 
     await saveMessage(
@@ -406,7 +485,7 @@ Rules:
     );
 
     // ======================================
-    // SEND REPLY
+    // SEND MESSAGE
     // ======================================
 
     await bot.sendMessage(
@@ -436,3 +515,4 @@ app.listen(PORT, () => {
   );
 
 });
+```
