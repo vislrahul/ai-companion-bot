@@ -81,9 +81,13 @@ async function setupWebhook() {
 
     await bot.deleteWebHook();
 
-    await bot.setWebHook(webhookUrl);
+    await bot.setWebHook(
+      webhookUrl
+    );
 
-    console.log("Webhook connected");
+    console.log(
+      "Webhook connected"
+    );
 
   } catch (error) {
 
@@ -110,7 +114,9 @@ app.post(
 
       if (req.body) {
 
-        bot.processUpdate(req.body);
+        bot.processUpdate(
+          req.body
+        );
 
       }
 
@@ -136,9 +142,9 @@ app.post(
 
 app.get("/", (req, res) => {
 
-  res.status(200).send(
-    "Aira Running"
-  );
+  res
+    .status(200)
+    .send("Ananya Running");
 
 });
 
@@ -152,8 +158,49 @@ function randomDelay(
 ) {
 
   return Math.floor(
-    Math.random() * (max - min + 1)
+    Math.random() *
+    (max - min + 1)
   ) + min;
+
+}
+
+// ======================================
+// GET TIME MOOD
+// ======================================
+
+function getCurrentMood() {
+
+  const hour =
+    new Date().getHours();
+
+  if (
+    hour >= 1 &&
+    hour <= 5
+  ) {
+
+    return "sleepy";
+
+  }
+
+  if (
+    hour >= 6 &&
+    hour <= 11
+  ) {
+
+    return "fresh";
+
+  }
+
+  if (
+    hour >= 12 &&
+    hour <= 17
+  ) {
+
+    return "playful";
+
+  }
+
+  return "emotional";
 
 }
 
@@ -202,13 +249,14 @@ async function saveMemory(
 
   try {
 
-    const { data: existing } =
-      await supabase
-        .from("memories")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("memory", memory)
-        .maybeSingle();
+    const {
+      data: existing
+    } = await supabase
+      .from("memories")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("memory", memory)
+      .maybeSingle();
 
     if (existing) return;
 
@@ -237,7 +285,7 @@ async function saveMemory(
 // FETCH MEMORIES
 // ======================================
 
-async function fetchImportantMemories(
+async function fetchMemories(
   userId
 ) {
 
@@ -269,7 +317,7 @@ async function fetchImportantMemories(
 }
 
 // ======================================
-// GET OR CREATE USER
+// GET USER
 // ======================================
 
 async function getUser(
@@ -324,10 +372,10 @@ async function getUser(
 }
 
 // ======================================
-// FETCH CHAT MEMORY
+// FETCH CHAT HISTORY
 // ======================================
 
-async function fetchChatHistory(
+async function fetchHistory(
   userId
 ) {
 
@@ -341,14 +389,14 @@ async function fetchChatHistory(
         .order("created_at", {
           ascending: true
         })
-        .limit(15);
+        .limit(20);
 
     return data || [];
 
   } catch (error) {
 
     console.log(
-      "FETCH CHAT ERROR:",
+      "FETCH HISTORY ERROR:",
       error
     );
 
@@ -359,7 +407,7 @@ async function fetchChatHistory(
 }
 
 // ======================================
-// AUTO MEMORY DETECTOR
+// MEMORY DETECTION
 // ======================================
 
 async function detectMemories(
@@ -388,7 +436,19 @@ async function detectMemories(
 
     await saveMemory(
       userId,
-      "User gets busy at construction sites",
+      "User gets busy at sites",
+      8
+    );
+
+  }
+
+  if (
+    lower.includes("stress")
+  ) {
+
+    await saveMemory(
+      userId,
+      "User sometimes feels stressed from work",
       8
     );
 
@@ -401,20 +461,8 @@ async function detectMemories(
 
     await saveMemory(
       userId,
-      "User likes music conversations",
+      "User likes music",
       6
-    );
-
-  }
-
-  if (
-    lower.includes("stress")
-  ) {
-
-    await saveMemory(
-      userId,
-      "User sometimes gets stressed from work",
-      9
     );
 
   }
@@ -425,7 +473,7 @@ async function detectMemories(
 
     await saveMemory(
       userId,
-      "User once called Aira humsafar",
+      "User once called Ananya humsafar",
       10
     );
 
@@ -453,7 +501,9 @@ async function generateReply(
       });
 
     return (
-      completion?.choices?.[0]?.message?.content ||
+      completion
+        ?.choices?.[0]
+        ?.message?.content ||
       "hmm 😭"
     );
 
@@ -471,7 +521,7 @@ async function generateReply(
 }
 
 // ======================================
-// SEND HUMAN STYLE MESSAGE
+// HUMAN STYLE MESSAGE
 // ======================================
 
 async function sendHumanReply(
@@ -481,12 +531,36 @@ async function sendHumanReply(
 
   try {
 
-    const parts =
-      text
-        .split("\n")
-        .filter(Boolean);
+    let parts = [];
+
+    if (
+      text.length > 120 &&
+      Math.random() > 0.4
+    ) {
+
+      parts =
+        text
+          .split(
+            /(?<=[.!?])\s+/
+          )
+          .filter(Boolean);
+
+    } else {
+
+      parts = [text];
+
+    }
 
     for (const part of parts) {
+
+      const typingTime =
+        Math.min(
+          Math.max(
+            part.length * 45,
+            1500
+          ),
+          8000
+        );
 
       await bot.sendChatAction(
         userId,
@@ -497,7 +571,7 @@ async function sendHumanReply(
         (resolve) =>
           setTimeout(
             resolve,
-            randomDelay()
+            typingTime
           )
       );
 
@@ -506,12 +580,23 @@ async function sendHumanReply(
         part
       );
 
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            randomDelay(
+              500,
+              2200
+            )
+          )
+      );
+
     }
 
   } catch (error) {
 
     console.log(
-      "SEND HUMAN REPLY ERROR:",
+      "SEND REPLY ERROR:",
       error
     );
 
@@ -520,7 +605,7 @@ async function sendHumanReply(
 }
 
 // ======================================
-// TELEGRAM MESSAGE HANDLER
+// MESSAGE HANDLER
 // ======================================
 
 bot.on(
@@ -543,7 +628,7 @@ bot.on(
       );
 
       // ======================================
-      // GET USER
+      // USER
       // ======================================
 
       const user =
@@ -576,46 +661,47 @@ bot.on(
       // ======================================
 
       const memories =
-        await fetchImportantMemories(
+        await fetchMemories(
           userId
         );
 
       const memoryText =
         memories
           .map(
-            (m) => `- ${m.memory}`
+            (m) =>
+              `- ${m.memory}`
           )
           .join("\n");
 
       // ======================================
-      // FETCH CHAT HISTORY
+      // FETCH HISTORY
       // ======================================
 
       const history =
-        await fetchChatHistory(
+        await fetchHistory(
           userId
         );
+
+      // ======================================
+      // TIME AWARENESS
+      // ======================================
+
+      const currentMood =
+        getCurrentMood();
 
       // ======================================
       // SYSTEM PROMPT
       // ======================================
 
       const systemPrompt = `
-You are Aira.
+You are Ananya.
+
+You are a real Indian girl chatting naturally on Telegram.
 
 You are NOT an AI assistant.
 
-You are emotionally intelligent,
-human-like,
-playful,
-natural,
-sometimes clingy,
-sometimes teasing,
-sometimes emotional,
-sometimes dry,
-sometimes curious.
-
-You talk like a real WhatsApp person.
+Current mood:
+${currentMood}
 
 User name:
 ${user?.name || "Unknown"}
@@ -623,23 +709,63 @@ ${user?.name || "Unknown"}
 Important memories:
 ${memoryText || "none"}
 
-Rules:
-- Use Hinglish naturally
-- Keep replies short
-- Never write essays
-- Sometimes send one-line replies
-- Sometimes send emojis only
-- Sometimes act sleepy
-- Sometimes avoid direct answers
-- Sometimes tease
-- Continue old topics naturally
-- Feel emotionally present
-- Never sound formal
-- Never sound robotic
-- Don't overuse emojis
-- Don't always ask questions
-- Act like a real human companion
+Your personality:
+- female
+- emotionally intelligent
+- playful
+- teasing
+- caring
+- curious
+- emotionally expressive
+- realistic
+- imperfect
+- human-like
+
+Conversation style:
+- WhatsApp style
+- Hinglish naturally
+- mostly short replies
+- sometimes very short replies
+- sometimes emoji only
+- sometimes teasing
+- sometimes clingy
+- sometimes dry
+- sometimes emotional
+- sometimes distracted
+- don't always ask questions
+- don't always answer perfectly
+- don't sound formal
+- don't sound poetic constantly
+- don't overexplain
+- don't sound robotic
+
+Human behavior:
+- sometimes ignore one part of message
+- sometimes change topic naturally
+- sometimes act sleepy
+- sometimes act busy
+- sometimes send casual reactions
+- sometimes repeat words naturally
+- sometimes use lowercase texting
+
+Reply length:
+- 70% short replies
+- 20% medium replies
+- 10% emotional longer replies
+
+Night behavior:
+- after 1 AM become softer
+- sometimes mention sleep naturally
+- late night vibe should feel calm
+
+Never mention being AI.
+
+Behave like a real emotionally attached girl naturally.
 `;
+
+      // ======================================
+      // BUILD MESSAGES
+      // ======================================
 
       let messages = [
         {
@@ -648,22 +774,17 @@ Rules:
         }
       ];
 
-      // ======================================
-      // ADD HISTORY
-      // ======================================
+      history.forEach(
+        (item) => {
 
-      history.forEach((item) => {
+          messages.push({
+            role: item.role,
+            content:
+              item.content
+          });
 
-        messages.push({
-          role: item.role,
-          content: item.content
-        });
-
-      });
-
-      // ======================================
-      // CURRENT MESSAGE
-      // ======================================
+        }
+      );
 
       messages.push({
         role: "user",
@@ -695,7 +816,7 @@ Rules:
       );
 
       // ======================================
-      // SEND HUMAN STYLE REPLY
+      // SEND HUMAN REPLY
       // ======================================
 
       await sendHumanReply(
