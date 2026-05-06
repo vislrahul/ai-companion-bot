@@ -4,7 +4,14 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
-app.use(express.json());
+
+app.use(express.json({
+  limit: '10mb'
+}));
+
+app.use(express.urlencoded({
+  extended: true
+}));
 
 const PORT = process.env.PORT || 3000;
 
@@ -13,8 +20,8 @@ const PORT = process.env.PORT || 3000;
 // =======================
 
 const supabase = createClient(
-process.env.SUPABASE_URL,
-process.env.SUPABASE_KEY
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
 );
 
 // =======================
@@ -22,45 +29,57 @@ process.env.SUPABASE_KEY
 // =======================
 
 const openai = new OpenAI({
-apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 // =======================
 // TELEGRAM BOT
 // =======================
 
-const bot = new TelegramBot(process.env.BOT_TOKEN);
+const bot = new TelegramBot(
+  process.env.BOT_TOKEN
+);
 
 // =======================
 // WEBHOOK
 // =======================
 
 const webhookUrl =
-`${process.env.RENDER_EXTERNAL_URL}/bot${process.env.BOT_TOKEN}`;
+  `${process.env.RENDER_EXTERNAL_URL}/bot${process.env.BOT_TOKEN}`;
 
-bot.setWebHook(webhookUrl);
+bot.deleteWebHook()
+  .then(() => {
+    return bot.setWebHook(webhookUrl);
+  })
+  .then(() => {
+    console.log("Webhook set successfully");
+  })
+  .catch((err) => {
+    console.log("WEBHOOK ERROR:", err);
+  });
+
+// =======================
+// TELEGRAM WEBHOOK ROUTE
+// =======================
 
 app.post(`/bot${process.env.BOT_TOKEN}`, async (req, res) => {
 
-try {
+  try {
 
-```
-if (req.body) {
-  bot.processUpdate(req.body);
-}
+    if (req.body) {
+      bot.processUpdate(req.body);
+    }
 
-res.sendStatus(200);
-```
+    res.sendStatus(200);
 
-} catch (error) {
+  } catch (error) {
 
-```
-console.log("WEBHOOK ERROR:", error);
+    console.log("WEBHOOK PROCESS ERROR:", error);
 
-res.sendStatus(200);
-```
+    res.sendStatus(200);
 
-}
+  }
+
 });
 
 // =======================
@@ -68,7 +87,7 @@ res.sendStatus(200);
 // =======================
 
 app.get('/', (req, res) => {
-res.send('Bot is running');
+  res.send('Bot is running');
 });
 
 // =======================
@@ -77,154 +96,167 @@ res.send('Bot is running');
 
 bot.on('message', async (msg) => {
 
-try {
+  try {
 
-```
-if (!msg.text) return;
+    if (!msg.text) return;
 
-const userId = String(msg.chat.id);
-const userMessage = msg.text;
+    const userId = String(msg.chat.id);
+    const userMessage = msg.text;
 
-console.log("MESSAGE RECEIVED:", userMessage);
+    console.log("MESSAGE RECEIVED:", userMessage);
 
-// =======================
-// SAVE USER MESSAGE
-// =======================
+    // =======================
+    // SAVE USER MESSAGE
+    // =======================
 
-const { error: saveError } = await supabase
-  .from('test')
-  .insert([
-    {
-      user_id: userId,
-      role: 'user',
-      content: userMessage
+    const { error: saveError } = await supabase
+      .from('test')
+      .insert([
+        {
+          user_id: userId,
+          role: 'user',
+          content: userMessage
+        }
+      ]);
+
+    if (saveError) {
+      console.log("SUPABASE SAVE ERROR:", saveError);
     }
-  ]);
 
-if (saveError) {
-  console.log("SUPABASE SAVE ERROR:", saveError);
-}
+    // =======================
+    // FETCH MEMORY
+    // =======================
 
-// =======================
-// FETCH MEMORY
-// =======================
+    const {
+      data: memoryData,
+      error: memoryError
+    } = await supabase
+      .from('test')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', {
+        ascending: true
+      })
+      .limit(10);
 
-const { data: memoryData, error: memoryError } = await supabase
-  .from('test')
-  .select('*')
-  .eq('user_id', userId)
-  .order('created_at', { ascending: false })
-  .limit(10);
+    if (memoryError) {
+      console.log("MEMORY FETCH ERROR:", memoryError);
+    }
 
-if (memoryError) {
-  console.log("MEMORY FETCH ERROR:", memoryError);
-}
+    // =======================
+    // SYSTEM PROMPT
+    // =======================
 
-// =======================
-// SYSTEM PROMPT
-// =======================
+    let messages = [
+      {
+        role: "system",
+        content:
+          "You are Aira, a caring Hinglish AI companion. Talk casually like a real human friend. Keep replies short, emotional, natural, cute, and WhatsApp-style. Understand emotions properly."
+      }
+    ];
 
-let messages = [
-  {
-    role: "system",
-    content:
-      "You are Aira, a caring Hinglish AI companion. Talk casually like a real human friend. Keep replies short, emotional, natural, cute, and WhatsApp-style. Understand emotions properly."
-  }
-];
+    // =======================
+    // ADD OLD MEMORY
+    // =======================
 
-// =======================
-// OLD MEMORY
-// =======================
+    if (memoryData && memoryData.length > 0) {
 
-if (memoryData) {
+      memoryData.forEach((item) => {
 
-  memoryData.reverse().forEach((item) => {
+        messages.push({
+          role: item.role,
+          content: item.content
+        });
+
+      });
+
+    }
+
+    // =======================
+    // CURRENT MESSAGE
+    // =======================
 
     messages.push({
-      role: item.role,
-      content: item.content
+      role: "user",
+      content: userMessage
     });
 
-  });
+    // =======================
+    // FOLLOW-UP MESSAGE
+    // =======================
 
-}
+    if (
+      userMessage.toLowerCase().includes("30") ||
+      userMessage.toLowerCase().includes("half hour")
+    ) {
 
-// =======================
-// CURRENT MESSAGE
-// =======================
+      setTimeout(async () => {
 
-messages.push({
-  role: "user",
-  content: userMessage
-});
+        try {
 
-// =======================
-// FOLLOW-UP REMINDER
-// =======================
+          await bot.sendMessage(
+            userId,
+            "ab free ho kya? 😄"
+          );
 
-if (
-  userMessage.toLowerCase().includes("30") ||
-  userMessage.toLowerCase().includes("half hour")
-) {
+        } catch (err) {
 
-  setTimeout(() => {
+          console.log("FOLLOW UP ERROR:", err);
 
-    bot.sendMessage(
+        }
+
+      }, 30 * 60 * 1000);
+
+    }
+
+    // =======================
+    // OPENAI RESPONSE
+    // =======================
+
+    const response =
+      await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: messages
+      });
+
+    const aiReply =
+      response.choices[0].message.content;
+
+    console.log("AI REPLY:", aiReply);
+
+    // =======================
+    // SAVE AI REPLY
+    // =======================
+
+    const { error: aiSaveError } =
+      await supabase
+        .from('test')
+        .insert([
+          {
+            user_id: userId,
+            role: 'assistant',
+            content: aiReply
+          }
+        ]);
+
+    if (aiSaveError) {
+      console.log("AI SAVE ERROR:", aiSaveError);
+    }
+
+    // =======================
+    // SEND MESSAGE
+    // =======================
+
+    await bot.sendMessage(
       userId,
-      "ab free ho kya? 😄"
+      aiReply
     );
 
-  }, 30 * 60 * 1000);
+  } catch (error) {
 
-}
+    console.log("MAIN ERROR:", error);
 
-// =======================
-// OPENAI RESPONSE
-// =======================
-
-const response = await openai.chat.completions.create({
-  model: "gpt-4o-mini",
-  messages: messages
-});
-
-const aiReply =
-  response.choices[0].message.content;
-
-// =======================
-// SAVE AI REPLY
-// =======================
-
-const { error: aiSaveError } = await supabase
-  .from('test')
-  .insert([
-    {
-      user_id: userId,
-      role: 'assistant',
-      content: aiReply
-    }
-  ]);
-
-if (aiSaveError) {
-  console.log("AI SAVE ERROR:", aiSaveError);
-}
-
-// =======================
-// SEND REPLY
-// =======================
-
-await bot.sendMessage(
-  userId,
-  aiReply
-);
-```
-
-} catch (error) {
-
-```
-console.log("MAIN ERROR:", error);
-```
-
-}
+  }
 
 });
 
@@ -234,6 +266,8 @@ console.log("MAIN ERROR:", error);
 
 app.listen(PORT, () => {
 
-console.log(`Server running on port ${PORT}`);
+  console.log(
+    `Server running on port ${PORT}`
+  );
 
 });
