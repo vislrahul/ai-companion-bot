@@ -22,7 +22,9 @@ const supabase = createClient(
 );
 
 // TELEGRAM BOT
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+const bot = new TelegramBot(process.env.BOT_TOKEN, {
+  polling: true
+});
 
 // OPENAI
 const openai = new OpenAI({
@@ -35,10 +37,19 @@ bot.on('message', async (msg) => {
     const userId = msg.chat.id;
     const userMessage = msg.text;
 
+    console.log("MESSAGE RECEIVED:", userMessage);
+
     // SAVE MESSAGE TO SUPABASE
-    await supabase.from('test').insert({
-      message: userMessage
-    });
+    const { data, error } = await supabase
+      .from('test')
+      .insert([
+        {
+          message: userMessage
+        }
+      ]);
+
+    console.log("SUPABASE DATA:", data);
+    console.log("SUPABASE ERROR:", error);
 
     // FOLLOW-UP TEST
     if (
@@ -66,13 +77,13 @@ bot.on('message', async (msg) => {
       ]
     });
 
-    // SEND MESSAGE
+    // SEND BOT REPLY
     bot.sendMessage(
       msg.chat.id,
       response.choices[0].message.content
     );
 
   } catch (error) {
-    console.error(error);
+    console.error("MAIN ERROR:", error);
   }
 });
