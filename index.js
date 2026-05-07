@@ -533,11 +533,11 @@ async function generateReply(
 
         model: "gpt-4o-mini",
 
-        temperature: 1.15,
+        temperature: 1.1,
 
-        presence_penalty: 0.8,
+        presence_penalty: 0.5,
 
-        frequency_penalty: 1,
+        frequency_penalty: 0.4,
 
         max_tokens: 35,
 
