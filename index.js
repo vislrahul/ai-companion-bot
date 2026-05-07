@@ -10,9 +10,9 @@ const { createClient } = require("@supabase/supabase-js");
 const app = express();
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-const PORT = process.env.PORT || 3000;
+const PORT =
+  process.env.PORT || 3000;
 
 // ======================================
 // ENV CHECK
@@ -54,7 +54,8 @@ const supabase = createClient(
 // ======================================
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey:
+    process.env.OPENAI_API_KEY
 });
 
 // ======================================
@@ -125,7 +126,7 @@ app.post(
     } catch (error) {
 
       console.log(
-        "WEBHOOK PROCESS ERROR:",
+        "WEBHOOK ERROR:",
         error
       );
 
@@ -142,9 +143,9 @@ app.post(
 
 app.get("/", (req, res) => {
 
-  res
-    .status(200)
-    .send("Ananya Running");
+  res.send(
+    "Ananya Running"
+  );
 
 });
 
@@ -165,10 +166,10 @@ function randomDelay(
 }
 
 // ======================================
-// CURRENT MOOD
+// TIME MOOD
 // ======================================
 
-function getCurrentMood() {
+function getTimeMood() {
 
   const hour =
     new Date().getHours();
@@ -200,7 +201,7 @@ function getCurrentMood() {
 
   }
 
-  return "calm";
+  return "soft";
 
 }
 
@@ -350,7 +351,9 @@ async function getUser(
           name:
             telegramUser.first_name || "",
           mood: "normal",
-          relationship_level: 1
+          affection_level: 1,
+          relationship_level: 1,
+          energy_level: 5
         }
       ])
       .select()
@@ -366,6 +369,38 @@ async function getUser(
     );
 
     return null;
+
+  }
+
+}
+
+// ======================================
+// UPDATE LAST SEEN
+// ======================================
+
+async function updateLastSeen(
+  userId
+) {
+
+  try {
+
+    await supabase
+      .from("users")
+      .update({
+        last_seen:
+          new Date()
+      })
+      .eq(
+        "user_id",
+        userId
+      );
+
+  } catch (error) {
+
+    console.log(
+      "LAST SEEN ERROR:",
+      error
+    );
 
   }
 
@@ -389,7 +424,7 @@ async function fetchHistory(
         .order("created_at", {
           ascending: false
         })
-        .limit(12);
+        .limit(10);
 
     return (
       data?.reverse() || []
@@ -409,7 +444,7 @@ async function fetchHistory(
 }
 
 // ======================================
-// MEMORY DETECTION
+// DETECT MEMORIES
 // ======================================
 
 async function detectMemories(
@@ -450,7 +485,7 @@ async function detectMemories(
 
     await saveMemory(
       userId,
-      "User sometimes gets stressed from work",
+      "User gets stressed from work sometimes",
       7
     );
 
@@ -498,13 +533,13 @@ async function generateReply(
 
         model: "gpt-4o-mini",
 
-        temperature: 1.2,
+        temperature: 1.25,
 
         presence_penalty: 1,
 
-        frequency_penalty: 0.8,
+        frequency_penalty: 0.9,
 
-        max_tokens: 80,
+        max_tokens: 70,
 
         messages
 
@@ -532,7 +567,7 @@ async function generateReply(
 }
 
 // ======================================
-// HUMAN REPLY
+// HUMAN STYLE SEND
 // ======================================
 
 async function sendHumanReply(
@@ -543,7 +578,7 @@ async function sendHumanReply(
   try {
 
     if (
-      Math.random() > 0.75
+      Math.random() > 0.7
     ) {
 
       text =
@@ -554,7 +589,7 @@ async function sendHumanReply(
     let parts = [];
 
     if (
-      text.length > 90 &&
+      text.length > 70 &&
       Math.random() > 0.5
     ) {
 
@@ -562,6 +597,19 @@ async function sendHumanReply(
         text
           .split(
             /(?<=[.!?])\s+/
+          )
+          .filter(Boolean);
+
+    } else if (
+      text.includes(",") &&
+      Math.random() > 0.5
+    ) {
+
+      parts =
+        text
+          .split(",")
+          .map(
+            p => p.trim()
           )
           .filter(Boolean);
 
@@ -574,7 +622,7 @@ async function sendHumanReply(
     for (const part of parts) {
 
       // ======================================
-      // READING DELAY
+      // HUMAN READING DELAY
       // ======================================
 
       await new Promise(
@@ -582,14 +630,14 @@ async function sendHumanReply(
           setTimeout(
             resolve,
             randomDelay(
-              1500,
+              1200,
               4500
             )
           )
       );
 
       // ======================================
-      // TYPING
+      // TYPING ACTION
       // ======================================
 
       await bot.sendChatAction(
@@ -598,20 +646,23 @@ async function sendHumanReply(
       );
 
       // ======================================
-      // REALISTIC TYPING TIME
+      // TYPING TIME
       // ======================================
 
       let typingTime =
-        part.length * 110;
+        randomDelay(
+          1500,
+          4000
+        );
 
       if (
-        part.length < 10
+        part.length > 25
       ) {
 
-        typingTime =
+        typingTime +=
           randomDelay(
-            800,
-            1800
+            2000,
+            5000
           );
 
       }
@@ -622,8 +673,8 @@ async function sendHumanReply(
 
         typingTime +=
           randomDelay(
-            2000,
-            5000
+            3000,
+            6000
           );
 
       }
@@ -643,7 +694,7 @@ async function sendHumanReply(
       typingTime =
         Math.min(
           typingTime,
-          14000
+          15000
         );
 
       await new Promise(
@@ -700,7 +751,7 @@ bot.on(
       );
 
       // ======================================
-      // USER
+      // GET USER
       // ======================================
 
       const user =
@@ -708,6 +759,10 @@ bot.on(
           userId,
           msg.from
         );
+
+      await updateLastSeen(
+        userId
+      );
 
       // ======================================
       // SAVE USER MESSAGE
@@ -720,7 +775,7 @@ bot.on(
       );
 
       // ======================================
-      // MEMORY DETECTION
+      // DETECT MEMORIES
       // ======================================
 
       await detectMemories(
@@ -755,11 +810,11 @@ bot.on(
         );
 
       // ======================================
-      // MOOD
+      // TIME MOOD
       // ======================================
 
       const currentMood =
-        getCurrentMood();
+        getTimeMood();
 
       // ======================================
       // SYSTEM PROMPT
@@ -768,7 +823,9 @@ bot.on(
       const systemPrompt = `
 You are Ananya.
 
-You are a real 22 year old Indian girl chatting casually on Telegram.
+You are a real Indian girl chatting casually on Telegram.
+
+You are female.
 
 You are NOT an AI assistant.
 
@@ -781,41 +838,56 @@ ${user?.name || "Unknown"}
 Memories:
 ${memoryText || "none"}
 
-Behavior:
-- talk naturally
-- use hinglish naturally
+Your personality:
+- feminine
+- playful
+- emotionally expressive
+- caring
+- teasing sometimes
+- human-like
+- imperfect
+- natural
+
+How you text:
+- use Hinglish naturally
 - mostly short replies
+- sometimes 1 line replies
 - sometimes dry replies
-- sometimes emotional
 - sometimes playful
+- sometimes emotional
 - sometimes teasing
-- sometimes caring
-- sometimes distracted
+- sometimes sleepy at night
+- sometimes use emojis naturally
+- sometimes lowercase texting
 
-VERY IMPORTANT:
-- never sound like customer support
-- never sound helpful
+IMPORTANT:
+- don't sound like customer support
+- don't sound like assistant
 - don't overexplain
-- don't give essays
+- don't give long essays
 - don't constantly ask questions
-- don't reply perfectly
 - don't act overly romantic
-- don't act too excited
-- don't suddenly switch topics
+- don't suddenly change topic
+- don't reply too perfectly
 
-Human texting:
-- sometimes say "hmm"
-- sometimes say "acha"
-- sometimes say "haan toh"
-- sometimes use lowercase
-- sometimes ignore one part
-- sometimes react casually
-- sometimes become sleepy at night
+Human texting behavior:
+- sometimes say:
+  "hmm"
+  "acha"
+  "haan toh"
+  "arre 😭"
+  "wtf 😂"
+  "uff"
+
+- sometimes ignore part of message
+- sometimes just react casually
+- sometimes become quiet
+- sometimes act busy
 
 Reply style:
 - 80% short replies
 - 15% medium replies
-- 5% longer emotional replies
+- 5% emotional longer replies
 
 Never mention being AI.
 `;
@@ -851,7 +923,7 @@ Never mention being AI.
       });
 
       // ======================================
-      // GENERATE AI REPLY
+      // GENERATE REPLY
       // ======================================
 
       const aiReply =
@@ -875,7 +947,7 @@ Never mention being AI.
       );
 
       // ======================================
-      // SEND HUMAN REPLY
+      // SEND REPLY
       // ======================================
 
       await sendHumanReply(
