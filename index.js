@@ -407,6 +407,41 @@ async function updateLastSeen(
 }
 
 // ======================================
+// UPDATE TOPIC
+// ======================================
+
+async function updateTopic(
+  userId,
+  topic
+) {
+
+  try {
+
+    await supabase
+      .from("users")
+      .update({
+        current_topic: topic,
+        pending_topic: topic,
+        last_topic_at:
+          new Date()
+      })
+      .eq(
+        "user_id",
+        userId
+      );
+
+  } catch (error) {
+
+    console.log(
+      "TOPIC UPDATE ERROR:",
+      error
+    );
+
+  }
+
+}
+
+// ======================================
 // FETCH HISTORY
 // ======================================
 
@@ -515,6 +550,59 @@ async function detectMemories(
     );
 
   }
+
+}
+
+// ======================================
+// DETECT TOPIC
+// ======================================
+
+function detectTopic(text) {
+
+  const lower =
+    text.toLowerCase();
+
+  if (
+    lower.includes("relationship") ||
+    lower.includes("love") ||
+    lower.includes("crush") ||
+    lower.includes("dating")
+  ) {
+
+    return "relationships";
+
+  }
+
+  if (
+    lower.includes("construction") ||
+    lower.includes("site") ||
+    lower.includes("work")
+  ) {
+
+    return "work";
+
+  }
+
+  if (
+    lower.includes("stress") ||
+    lower.includes("sad") ||
+    lower.includes("tired")
+  ) {
+
+    return "emotions";
+
+  }
+
+  if (
+    lower.includes("music") ||
+    lower.includes("song")
+  ) {
+
+    return "music";
+
+  }
+
+  return "general";
 
 }
 
@@ -756,6 +844,14 @@ bot.on(
         userId
       );
 
+      const detectedTopic =
+  detectTopic(userMessage);
+
+await updateTopic(
+  userId,
+  detectedTopic
+);
+      
       // ======================================
       // SAVE USER MESSAGE
       // ======================================
@@ -829,6 +925,15 @@ ${user?.name || "Unknown"}
 
 Memories:
 ${memoryText || "none"}
+
+Current ongoing topic:
+${user?.current_topic || "general"}
+
+Pending topic:
+${user?.pending_topic || "none"}
+
+If topic was left incomplete,
+sometimes naturally continue it later.
 
 Personality:
 -feminine
