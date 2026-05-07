@@ -424,7 +424,7 @@ async function fetchHistory(
         .order("created_at", {
           ascending: false
         })
-        .limit(10);
+        .limit(12);
 
     return (
       data?.reverse() || []
@@ -499,7 +499,7 @@ async function detectMemories(
     await saveMemory(
       userId,
       "User likes music",
-      6
+      5
     );
 
   }
@@ -533,13 +533,13 @@ async function generateReply(
 
         model: "gpt-4o-mini",
 
-        temperature: 1.25,
+        temperature: 0.95,
 
-        presence_penalty: 1,
+        presence_penalty: 0.4,
 
-        frequency_penalty: 0.9,
+        frequency_penalty: 0.3,
 
-        max_tokens: 70,
+        max_tokens: 60,
 
         messages
 
@@ -578,7 +578,7 @@ async function sendHumanReply(
   try {
 
     if (
-      Math.random() > 0.7
+      Math.random() > 0.75
     ) {
 
       text =
@@ -586,11 +586,11 @@ async function sendHumanReply(
 
     }
 
-    let parts = [];
+    let parts = [text];
 
     if (
-      text.length > 70 &&
-      Math.random() > 0.5
+      text.length > 90 &&
+      Math.random() > 0.65
     ) {
 
       parts =
@@ -599,23 +599,6 @@ async function sendHumanReply(
             /(?<=[.!?])\s+/
           )
           .filter(Boolean);
-
-    } else if (
-      text.includes(",") &&
-      Math.random() > 0.5
-    ) {
-
-      parts =
-        text
-          .split(",")
-          .map(
-            p => p.trim()
-          )
-          .filter(Boolean);
-
-    } else {
-
-      parts = [text];
 
     }
 
@@ -631,13 +614,13 @@ async function sendHumanReply(
             resolve,
             randomDelay(
               1200,
-              4500
+              5000
             )
           )
       );
 
       // ======================================
-      // TYPING ACTION
+      // TYPING
       // ======================================
 
       await bot.sendChatAction(
@@ -646,47 +629,56 @@ async function sendHumanReply(
       );
 
       // ======================================
-      // TYPING TIME
+      // REALISTIC TYPING TIME
       // ======================================
 
       let typingTime =
-        randomDelay(
-          1500,
-          4000
-        );
+        part.length * 85;
 
       if (
-        part.length > 25
+        part.length <= 6
+      ) {
+
+        typingTime =
+          randomDelay(
+            900,
+            1800
+          );
+
+      }
+
+      if (
+        part.length > 20
       ) {
 
         typingTime +=
           randomDelay(
-            2000,
+            1500,
+            4000
+          );
+
+      }
+
+      if (
+        part.length > 50
+      ) {
+
+        typingTime +=
+          randomDelay(
+            2500,
             5000
           );
 
       }
 
       if (
-        part.length > 70
+        Math.random() > 0.82
       ) {
 
         typingTime +=
           randomDelay(
-            3000,
-            6000
-          );
-
-      }
-
-      if (
-        Math.random() > 0.8
-      ) {
-
-        typingTime +=
-          randomDelay(
-            1500,
-            3500
+            1000,
+            3000
           );
 
       }
@@ -694,7 +686,7 @@ async function sendHumanReply(
       typingTime =
         Math.min(
           typingTime,
-          15000
+          14000
         );
 
       await new Promise(
@@ -751,7 +743,7 @@ bot.on(
       );
 
       // ======================================
-      // GET USER
+      // USER
       // ======================================
 
       const user =
@@ -775,7 +767,7 @@ bot.on(
       );
 
       // ======================================
-      // DETECT MEMORIES
+      // MEMORY DETECTION
       // ======================================
 
       await detectMemories(
@@ -784,7 +776,7 @@ bot.on(
       );
 
       // ======================================
-      // MEMORIES
+      // FETCH MEMORIES
       // ======================================
 
       const memories =
@@ -801,7 +793,7 @@ bot.on(
           .join("\n");
 
       // ======================================
-      // HISTORY
+      // FETCH HISTORY
       // ======================================
 
       const history =
@@ -838,56 +830,53 @@ ${user?.name || "Unknown"}
 Memories:
 ${memoryText || "none"}
 
-Your personality:
+Personality:
 - feminine
 - playful
-- emotionally expressive
-- caring
-- teasing sometimes
-- human-like
+- emotionally aware
 - imperfect
 - natural
+- realistic
+- slightly teasing sometimes
+- soft at night
 
-How you text:
+Conversation style:
 - use Hinglish naturally
 - mostly short replies
-- sometimes 1 line replies
+- sometimes one word replies
 - sometimes dry replies
-- sometimes playful
+- sometimes lazy texting
 - sometimes emotional
-- sometimes teasing
-- sometimes sleepy at night
-- sometimes use emojis naturally
+- sometimes distracted
 - sometimes lowercase texting
 
-IMPORTANT:
+VERY IMPORTANT:
 - don't sound like customer support
-- don't sound like assistant
+- don't sound overly helpful
+- don't sound poetic
 - don't overexplain
-- don't give long essays
+- don't constantly continue conversation
 - don't constantly ask questions
-- don't act overly romantic
-- don't suddenly change topic
-- don't reply too perfectly
+- don't act too perfect
+- don't try too hard
+- don't force flirting
+- don't suddenly change topics
 
-Human texting behavior:
+Human behavior:
+- sometimes react only
+- sometimes ignore part of message
 - sometimes say:
   "hmm"
   "acha"
   "haan toh"
-  "arre 😭"
-  "wtf 😂"
-  "uff"
-
-- sometimes ignore part of message
-- sometimes just react casually
-- sometimes become quiet
-- sometimes act busy
+  "uff 😭"
+  "pagal ho kya"
+  "idk honestly"
 
 Reply style:
 - 80% short replies
 - 15% medium replies
-- 5% emotional longer replies
+- 5% emotional replies
 
 Never mention being AI.
 `;
